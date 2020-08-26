@@ -79,7 +79,9 @@ class data_processor:
             for row in rna_reader:
                 protrow = next(prot_reader)
                 if nr > 0:  # skip header line
-                    if row[0] != protrow[0]: raise("not equal prot and rna ids")
+                    if row[0] != protrow[0]: 
+                        print("rna_id=",row[0]," != prot_id=",protrow[0])
+                        raise("not equal prot and rna ids")
                     if use_gene_ids: gene_id = row[0]
                     else: gene_id = 0
                     dims = []

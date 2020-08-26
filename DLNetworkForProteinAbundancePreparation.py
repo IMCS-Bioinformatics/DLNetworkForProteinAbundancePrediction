@@ -1,7 +1,10 @@
 import sys, getopt, csv
 
+def is_blank(s):
+    return not bool(s and s.strip())
+
 def usage():
-   print ('DLNetworkForProteinAbundancePreparation.py --i1 <inputfile1> --i2 <inputfile2> --o1 <outputfile1> --o2 <outputfile2> --d1 <delimiter1> --d2<delimiter2> --id <identifier> --dout<out_delimiter>')
+   print ('DLNetworkForProteinAbundancePreparation.py --i1 <inputfile1> --i2 <inputfile2> --o1 <outputfile1> --o2 <outputfile2> --d1 <delimiter1> --d2 <delimiter2> --id <identifier> --dout <out_delimiter> --cs --subst --nthr <threshold>')
 
 def main(argv):
    casesensitive = False
@@ -14,8 +17,12 @@ def main(argv):
    default_out_delimiter_value = "DeFaUltVaLuE"
    out_delimiter = default_out_delimiter_value
    identifier = 'Id'
+   casesensitive = False
+   normalize = False
+   substitute = False
+   norm_threshold = 0.0
    try:
-      opts, args = getopt.getopt(argv,"hi:o:d:I:O:D:e:f:c",["help=","i1=","o1=","d1=","i2=","o2=","d2=","id=","dout=","cs"])
+      opts, args = getopt.getopt(argv,"hi:o:d:I:O:D:e:f:c:n:S",["help=","i1=","o1=","d1=","i2=","o2=","d2=","id=","dout=","cs","nthr=","subst"])
    except getopt.GetoptError as err:
       print (err.msg)
       usage()
@@ -28,27 +35,47 @@ def main(argv):
          sys.exit()
       elif opt in ("-i", "--i1"):
          inputfile1 = arg
+         print ('=> Input file 1 is "',inputfile1,'"',sep='')
       elif opt in ("-I", "--i2"):
          inputfile2 = arg
+         print ('=> Input file 2 is "',inputfile2,'"',sep='')
       elif opt in ("-o", "--o1"):
          outputfile1 = arg
+         print ('=> Output file 1 is "',outputfile1,'"',sep='')
       elif opt in ("-O", "--o2"):
          outputfile2 = arg
+         print ('=> Output file 2 is "',outputfile2,'"',sep='')
       elif opt in ("-d", "--d1"):
          if arg != "TAB":
            delimiter1 = arg
+         print ('=> Delimiter for file 1 is "',delimiter1,'"',sep='')
       elif opt in ("-D", "--d2"):
          if arg != "TAB":
            delimiter2 = arg
+         print ('=> Delimiter for file 2 is "',delimiter2,'"',sep='')
       elif opt in ("-e", "--id"):
          identifier = arg
+         print ('=> Identifier is "',identifier,'"',sep='')
       elif opt in ("-f", "--dout"):
          if arg == "TAB":
            out_delimiter = '\t'
          else:
            out_delimiter = arg
+         print ('=> Output delimiter is "',out_delimiter,'"',sep='')
       elif opt in ("-c", "--cs"):
          casesensitive = True
+         print ('=> Case sensitive is "',casesensitive,'"',sep='')
+      elif opt in ("-S", "--subst"):
+         substitute = True
+         print ('=> Substitute missing values with zeroes is "',substitute,'"',sep='')
+      elif opt in ("-n", "--nthr"):
+         try:
+            norm_threshold = float(arg)
+         except ValueError:
+            print (' Threshold value "'+arg+'" is not a number!')
+            norm_threshold = 0.0
+         normalize = True
+         print ('=> Normalization threshold is "',norm_threshold,'"',sep='')
          
    if (not casesensitive):
        identifier = identifier.upper()
@@ -63,6 +90,8 @@ def main(argv):
    if (out_delimiter != default_out_delimiter_value):
      print ('Output delimiter is "',out_delimiter,'"',sep='')
    print ('Case sensitive is "',casesensitive,'"',sep='')
+   print ('Substitute missing values with zeroes is "',substitute,'"',sep='')
+   print ('Normalize is "',normalize,'" (threshold is "',norm_threshold,'")',sep='')
     
    with open(inputfile1, newline='') as csvinfile1:
      if (casesensitive):  
@@ -108,6 +137,10 @@ def main(argv):
          
        colnames[1:] = sorted(colnames[1:])     
        print("Collected and sorted column names:",colnames)
+
+       if (normalize or substitute):       
+         numcolnames = colnames[1:]
+         print("Potentially numerical columns:",numcolnames)
        
        # Do not include duplicate identifiers or identifiers not presented in both files
        ids_not = set()
@@ -119,6 +152,15 @@ def main(argv):
          if (row[identifier] not in ids_not) :
              if (row[identifier] not in ids1) :
                  ids1.add(row[identifier])  
+                 if (normalize or substitute):
+                    for name in numcolnames:
+                        try:
+                            if is_blank(row[name]):
+                                row[name] = 0
+                            val = float(row[name])
+                        except ValueError:
+                            print("Value ("+name+") "+row[name]+" is not a number!")
+                            numcolnames.remove(name)
              else :
                  ids_not.add(row[identifier])
                  ids1.remove(row[identifier])
@@ -132,6 +174,15 @@ def main(argv):
          if (row[identifier] not in ids_not) :
              if (row[identifier] not in ids2) :  
                  ids2.add(row[identifier])
+                 if (normalize or substitute):
+                    for name in numcolnames:
+                        try:
+                            if is_blank(row[name]):
+                                row[name] = 0
+                            val = float(row[name])
+                        except ValueError:
+                            print("Value ("+name+") "+row[name]+" is not a number!")
+                            numcolnames.remove(name)
              else :
                  ids_not.add(row[identifier])
                  ids2.remove(row[identifier])
@@ -141,10 +192,12 @@ def main(argv):
        ids1.intersection_update(ids2)       
        
 #       print(ids1)
-       
+
+       if (normalize or substitute) :       
+         print("Final list of numerical columns:",numcolnames)
+         
        csvinfile1.seek(0)
-       csvinfile2.seek(0)
-       
+       csvinfile2.seek(0)       
        
        if (not casesensitive):  
          reader1 = csv.DictReader((l.upper() for l in csvinfile1), delimiter=delimiter1)
@@ -169,6 +222,9 @@ def main(argv):
        
 #       print("===========")
        
+       non_zero_sum1 = 0.0
+       non_zero_count1 = 0
+       
        dict1 = {}
        for row in reader1:
 #           print(row.keys())
@@ -177,7 +233,22 @@ def main(argv):
              print(message)
              sys.exit(message)
            elif (row[identifier] in ids1):
+             if (normalize or substitute):
+                for name in numcolnames:
+                    try:
+                        flo = float(row[name])
+                        if (flo >= norm_threshold):
+                            non_zero_sum1 += flo
+                            non_zero_count1 += 1
+                        else:
+                            row[name] = 0.0
+                    except ValueError:
+#                        print("Value ("+name+") "+row[name]+" is not a number! (Dict1)")
+#                        print(row)
+                         row[name] = 0.0
+                
              dict1[row[identifier]] = row
+
            else:
              if (row[identifier] == identifier):
              # do nothing - it's header
@@ -191,7 +262,12 @@ def main(argv):
                
 #       print("===========")        
 #       print(dict1)  
+       if (normalize):
+           print("Non_zero_sum1 = "+str(non_zero_sum1)+"   non_zero_count1 = "+str(non_zero_count1))
 #       print("===========")
+
+       non_zero_sum2 = 0.0
+       non_zero_count2 = 0
                
        dict2 = {}
        for row in reader2:
@@ -200,7 +276,20 @@ def main(argv):
              print(message)
              sys.exit(message)
            elif (row[identifier] in ids1):  #ids1 is the correct common collection!
+             if (normalize or substitute):
+                for name in numcolnames:
+                    try:
+                        flo = float(row[name])
+                        if (flo > 0.0):
+                            non_zero_sum2 += flo
+                            non_zero_count2 += 1
+                    except ValueError:
+#                        print("Value ("+name+") "+row[name]+" is not a number! (Dict2)")
+#                        print(row)
+                         row[name] = 0.0
+                        
              dict2[row[identifier]] = row
+             
            else:
              if (row[identifier] == identifier):
              # do nothing - it's header
@@ -214,6 +303,25 @@ def main(argv):
        
 #       print("===========")
 #       print(dict2) 
+       if (normalize):
+           print("Non_zero_sum2 = "+str(non_zero_sum2)+"   non_zero_count2 = "+str(non_zero_count2))
+           if (non_zero_count1 == 0) or (non_zero_count2 == 0):
+                n_coeff = 1.0
+           else:
+                n_coeff = (non_zero_sum1 / non_zero_count1) / (non_zero_sum2 / non_zero_count2)
+           print("Normalisation coefficient = "+str(n_coeff))
+           
+#       N-O-R-M-A-L-I-S-A-T-I-O-N 
+
+           for key in dict2:
+             row = dict2[key]
+#             print("dic2["+key+"]:"+str(row))
+             for name in numcolnames:
+#                print("row["+name+"]="+str(row[name]))
+                row[name] = n_coeff * float(row[name])
+             dict2[key] = row
+           
+           
 #       print("===========")
        
        with open(outputfile1, 'w', newline='') as csvoutfile1:
