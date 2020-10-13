@@ -42,7 +42,7 @@ train a neural network which can predict protein expression for all proteins, in
 
 
 ## Running the code 
-See this [guide](https://github.com/IMCS-Bioinformatics/DLNetworkForProteinAbundancePrediction/assets/DLNetworkForProteinAbundancePreparationAndPredictionDescription.pdf) on running the code.
+See this [guide](assets/DLNetworkForProteinAbundancePreparationAndPredictionDescription.pdf) on running the code.
 
 
 ## Contact information
